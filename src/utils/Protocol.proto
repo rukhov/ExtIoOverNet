@@ -1,0 +1,206 @@
+/*****************************************************************************
+ * This file is a part of ExtIoOverNet software.
+ * 
+ * Copyright (C) 2023 Roman Ukhov. All rights reserved.
+ * 
+ * Licensed under the GNU General Public License Version 3 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at 
+ * https://www.gnu.org/licenses/gpl-3.0.txt
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-FileCopyrightText: 2023 Roman Ukhov <ukhov.roman@gmail.com>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *****************************************************************************/
+
+syntax = "proto3";
+
+//option optimize_for = LITE_RUNTIME;
+
+package ExtIO_TCP_Proto;
+
+import "google/protobuf/timestamp.proto";
+
+enum ErrorCode {
+	Success = 0;
+	NotImplemented = 1;
+	Unexpected = 2;
+	LogicError = 3;
+	ExtIO_DllIsNotLoaded = 4;
+	InvalidArgument = 5;
+}
+
+message ProtocolVersion {
+	uint64 version_number = 1;
+	string client_version_name = 2;
+}
+
+message RqsHello {
+	ProtocolVersion version = 1;
+}
+
+message RqsError {
+	optional ErrorCode error = 1;
+}
+
+message RqsLoadExtIOApi {
+}
+
+message RqsInitHW {
+	optional bool result = 1;
+	optional string name = 2;
+	optional string model = 3;
+	optional int32  type = 4;
+}
+
+message RqsOpenHW {
+	optional bool result = 1;
+}
+
+message RqsSetHWLO {
+	optional int32 result = 1;
+	optional int32 LOfreq = 2;
+}
+
+message RqsSetHWLO64 {
+	optional int64 result = 1;
+	optional int64 LOfreq = 2;
+}
+
+message RqsGetHWSR {
+	optional int32 result = 1;
+}
+
+message RqsStartHW {
+	optional int32 result = 1;
+	optional int32 extLOfreq = 2;
+}
+
+message RqsStopHW {
+}
+
+message RqsVersionInfo {
+	optional string progname = 1;
+	optional int32 ver_major = 2;
+	optional int32 ver_minor = 3;
+}
+
+message RqsGetAttenuators {
+	optional int32 result = 1;
+	optional int32 atten_idx = 2;
+	optional float attenuation = 3;
+}
+
+message RqsGetActualAttIdx {
+	optional int32 result = 1;
+}
+
+message RqsExtIOCallback {
+	optional int32 cnt = 1;
+	optional int32 status = 2;
+	optional float IQoffs = 3;
+	optional bytes IQdata = 4;
+}
+
+message RqsExtIoShowMGC {
+	optional int32 result = 1;
+	optional int32 agc_idx = 2;
+}
+
+message RqsShowGUI {
+}
+
+message RqsHideGUI {
+}
+
+message RqsSwitchGUI {
+}
+
+message RqsExtIoGetAGCs {
+	optional int32 result = 1;
+	optional int32 agc_idx = 2;
+	optional string text = 3;
+}
+
+message RqsExtIoGetActualAGCidx {
+	optional int32 result = 1;
+}
+
+message RqsExtIoGetMGCs {
+	optional int32 result = 1;
+	optional int32 mgc_idx = 2;
+	optional float gain = 3;
+}
+
+message RqsExtIoGetActualMgcIdx {
+	optional int32 result = 1;
+}
+
+message RqsExtIoGetSrates {
+	optional int32 result = 1;
+	optional int32 srate_idx = 2;
+	optional double samplerate = 3;
+}
+
+message RqsExtIoGetActualSrateIdx {
+	optional int32 result = 1;
+}
+
+message RqsExtIoSetSrate {
+	optional int32 result = 1;
+	optional int32 srate_idx = 2;
+}
+
+message RqsExtIoGetBandwidth {
+	optional int32 result = 1;
+	optional int32 srate_idx = 2;
+}
+
+enum MsgType {
+	Request = 0;		// Does require immediate responce
+	Responce = 1;		// This is a responce to the previous request
+}
+
+message Message {
+
+	optional ErrorCode ResultCode = 1;
+	oneof Content {
+		RqsHello			Hello = 2;
+		RqsError			Error = 3;
+		RqsLoadExtIOApi		LoadExtIOApi = 4;
+		RqsInitHW			InitHW = 5;
+		RqsExtIOCallback	ExtIOCallback = 6;
+		RqsOpenHW			OpenHW = 7;
+		RqsSetHWLO			SetHWLO = 8;
+		RqsSetHWLO64		SetHWLO64 = 9;
+		RqsGetHWSR			GetHWSR = 10;
+		RqsStartHW			StartHW = 11;
+		RqsStopHW			StopHW = 12;
+		RqsVersionInfo		VersionInfo = 13;
+		RqsGetAttenuators	GetAttenuators = 14;
+		RqsGetActualAttIdx	GetActualAttIdx = 15;
+		RqsExtIoShowMGC		ExtIoShowMGC = 16;
+		RqsShowGUI			ShowGUI = 17;
+		RqsHideGUI			HideGUI = 18;
+		RqsSwitchGUI		SwitchGUI = 19;
+		RqsExtIoGetAGCs		ExtIoGetAGCs = 20;
+		RqsExtIoGetActualAGCidx ExtIoGetActualAGCidx = 21;
+		RqsExtIoGetMGCs		ExtIoGetMGCs = 22;
+		RqsExtIoGetActualMgcIdx ExtIoGetActualMgcIdx = 23;
+		RqsExtIoGetSrates	ExtIoGetSrates = 24;
+		RqsExtIoGetActualSrateIdx ExtIoGetActualSrateIdx = 25;
+		RqsExtIoSetSrate	ExtIoSetSrate = 26;
+		RqsExtIoGetBandwidth ExtIoGetBandwidth = 27;
+	}
+}
+
+message PackagedMessage
+{
+	MsgType type = 1;
+	int64 dialog_id = 2;
+	Message msg = 3;
+}
