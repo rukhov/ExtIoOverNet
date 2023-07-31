@@ -47,10 +47,11 @@ namespace
         std::shared_ptr<Protocol::IParser> _proto;
 
         deadline_timer _reconnect_timer;
+        bool _connectingStarted = false;
         bool _connectionEstablished = false;
         bool _apiLoaded = false;
         Mutexed<pfnExtIOCallback> _pfnExtIOCallback = nullptr;
-        std::vector<std::promise<void>> _initWaiters;
+        std::vector<std::promise<bool>> _initWaiters;
 
         AliveInstance _inst;
 
@@ -87,6 +88,7 @@ namespace
 
         void Cancel()
         {
+            _connectingStarted = false;
             _connectionEstablished = false;
             _reconnect_timer.cancel();
             if (_proto) _proto->Cancel();
@@ -99,6 +101,8 @@ namespace
         {
             BOOST_LOG_NAMED_SCOPE("Connect");
             LOG(trace) << "Service started, connecting.";
+
+            _connectingStarted = true;
 
             _connection->Connect(_options.serverAddress, _options.serverPort, 
                 [this, a = AliveFlag(), cb = std::move(cb)](const boost::system::error_code& ec) mutable
@@ -123,6 +127,7 @@ namespace
                 OnDisconnected();
 
             _connectionEstablished = false;
+            _connectingStarted = false;
             RestartConnection(8000);
 
             return false;
@@ -271,7 +276,7 @@ namespace
                 LOG(trace) << "LoadExtIOApi responce received.";
                 _apiLoaded = true;
                 for (auto& w : _initWaiters)
-                    w.set_value();
+                    w.set_value(true);
                 _initWaiters.clear();
 
                 auto cb = _pfnExtIOCallback.lock();
@@ -289,23 +294,25 @@ namespace
 
         bool WaitForApiLoaded(uint32_t ms = 4000)
         {
-            std::promise<void> prm;
+            std::promise<bool> prm;
             auto fut = prm.get_future();
 
-            asio::defer(_strand,
+            asio::dispatch(_strand,
                 [this, prm = std::move(prm), a = AliveFlag()]() mutable {
                     if (!a.IsAlive())
                     {
-                        prm.set_value();
+                        prm.set_value(false);
                         return;
                     }
-                    if (!_apiLoaded)
-                        _initWaiters.push_back(std::move(prm));
-                    else
-                        prm.set_value();
+                    if (_apiLoaded)
+                        prm.set_value(true);
+                    _initWaiters.push_back(std::move(prm));
                 });
 
-            return fut.wait_for(std::chrono::milliseconds(ms)) == std::future_status::ready;
+            if (fut.wait_for(std::chrono::milliseconds(ms)) == std::future_status::ready)
+                return fut.get();
+
+            return false;
         }
 
         // IService
@@ -317,11 +324,11 @@ namespace
             asio::dispatch(_strand, 
                 [this, a = AliveFlag()]() {
                     if (!a.IsAlive()) return;
-                    if (!_connectionEstablished)
+                    if (!_connectionEstablished && !_connectingStarted)
                         Connect([this](const boost::system::error_code& ec) {});
                 });
 
-            return WaitForApiLoaded();
+            return true;
         }
 
         void Stop() override
@@ -545,7 +552,7 @@ namespace
             auto const rqsContentCase = rqs.Content_case();
             auto h = [this, a = AliveFlag(), p, &_did]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
-                if (!a.IsAlive() || !_connectionEstablished) {
+                if (!a.IsAlive() || !_apiLoaded) {
                     p->set_value({});
                     return;
                 }
@@ -553,7 +560,7 @@ namespace
                 p->set_value(res);
             };
             asio::dispatch(_strand, [this, a = AliveFlag(), rqs = std::move(rqs), h = std::move(h)]() mutable {
-                if (!a.IsAlive() || !_connectionEstablished) {
+                if (!a.IsAlive() || !_apiLoaded) {
                     h({}, {}, -1);
                     return;
                 }
