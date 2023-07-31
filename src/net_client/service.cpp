@@ -287,7 +287,7 @@ namespace
             return {};
         }
 
-        std::future_status WaitForConnection(uint32_t ms = 30000)
+        bool WaitForApiLoaded(uint32_t ms = 4000)
         {
             std::promise<void> prm;
             auto fut = prm.get_future();
@@ -305,7 +305,7 @@ namespace
                         prm.set_value();
                 });
 
-            return fut.wait_for(std::chrono::milliseconds(ms));
+            return fut.wait_for(std::chrono::milliseconds(ms)) == std::future_status::ready;
         }
 
         // IService
@@ -321,11 +321,7 @@ namespace
                         Connect([this](const boost::system::error_code& ec) {});
                 });
 
-            auto res = WaitForConnection();
-            if (res == std::future_status::ready)
-                return true;
-
-            return false;
+            return WaitForApiLoaded();
         }
 
         void Stop() override
@@ -472,6 +468,8 @@ namespace
         int StartHW(long extLOfreq) override
         {
             LOG(trace) << "StartHW called";
+
+            //WaitForApiLoaded();
 
             auto [p, f] = Protocol::MakePFPair<int>();
 

@@ -398,8 +398,6 @@ namespace
 
             SetupOptions();
 
-            LOG(trace) << "Connected.";
-
             cb(error);
         }
     };
