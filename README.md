@@ -3,7 +3,7 @@ This software is intended to transmit IQ data from the different Software Define
 ExtIoOverNet software consists of two components. First is the ExtIO_OverNetServer.exe - this is a server that run on the machive to which the SDR is connected to. Second is a ExtIO_OverNetClient.dll - the client ExtIO API dll that is installed on the remote machine where is installed your favorite SDR software like HDSDR.
 The important pecondition is that the SDR drivers and the SDR software both should support the ExtIO API.
 ## Build
-You need cmake to build the project.
+You need MS Visual Studio 2022, boost c++ library, protobuf and cmake to build the project.
 ## Install and Run
 * Copy the ExtIO_OverNetServer.exe server binary to the machine which the SDR hardware is connected to. Run the serve with command line parameters describel below.<br>
 <b>--extio_path=<Path to the ExtIO_XXX.dll></b>  - ExtIO API dynamic linking library to be propagated over the network. This is mandatory parameter.<br>
