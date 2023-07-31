@@ -25,6 +25,7 @@
 #include "../utils/IsAlive.h"
 #include "../utils/Mutexed.h"
 #include "../utils/AtScopeExit.h"
+#include "../utils/GlobalDefs.h"
 
 using namespace boost;
 
@@ -138,6 +139,8 @@ namespace
             if (!CheckErrorCode(ec))
                 return;
 
+            LOG(trace) << "Service connected.";
+
             _connectionEstablished = true;
 
             _proto = Protocol::MakeParser(*_connection);
@@ -145,9 +148,11 @@ namespace
             //AsyncReadData();
             AsyncReadRequest();
 
+            LOG(trace) << "Sending Hello request.";
+
             auto msg = Protocol::Make_Hello_Msg(
                 Protocol::c_protocolVersion, 
-                "ExtIO_TCP_client.dll");
+                c_appName);
 
             auto h = [this, a = AliveFlag(), cb = std::move(cb)]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
@@ -162,7 +167,9 @@ namespace
         void OnDisconnected()
         {
             _apiLoaded = false;
-            LOG(trace) << "Disconnected, force Client to stop.";
+            LOG(trace) << "Disconnected, force Client to reconnnect.";
+
+            _proto->Cancel();
 
             auto fn = _pfnExtIOCallback.lock();
             if (*fn)
@@ -239,8 +246,10 @@ namespace
             if (!delayMs)
                 return restart();
             
-            _reconnect_timer.async_wait([this, restart = std::move(restart)](const boost::system::error_code& error) {
+            _reconnect_timer.async_wait([this, a = AliveFlag(), restart = std::move(restart)](const boost::system::error_code& error) {
                 if (error.failed())
+                    return;
+                if (!a.IsAlive())
                     return;
                 restart();
                 });
@@ -319,16 +328,14 @@ namespace
         // Another thread context
         // Blocking calls
     private:
-        bool Start() override
+        void Start() override
         {
             asio::dispatch(_strand, 
                 [this, a = AliveFlag()]() {
                     if (!a.IsAlive()) return;
                     if (!_connectionEstablished && !_connectingStarted)
-                        Connect([this](const boost::system::error_code& ec) {});
+                        Connect({});
                 });
-
-            return true;
         }
 
         void Stop() override
@@ -365,10 +372,13 @@ namespace
 
         bool InitHW(char* name, char* model, int& type) override
         {
-            if (!Start())
-                return false;
+            Start();
+
+            WaitForApiLoaded();
 
             LOG(trace) << "InitHW called";
+
+            return true;
 
             auto [p, f] = Protocol::MakePFPair<ExtIO_TCP_Proto::Message>();
 
