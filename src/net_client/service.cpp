@@ -50,6 +50,7 @@ namespace
         bool _connectingStarted = false;
         bool _connectionEstablished = false;
         std::atomic_bool _apiLoaded = false;
+        std::atomic_long _isHwStarted = -1;
         boost::synchronized_value<pfnExtIOCallback> _pfnExtIOCallback = nullptr;
         std::vector<std::promise<bool>> _initWaiters;
 
@@ -292,6 +293,12 @@ namespace
                     //(*cb)(-1, extHw_RUNNING, .0, nullptr);
                     //(*cb)(-1, extHw_Start, .0, nullptr);
                 }
+
+                if (_isHwStarted > 0)
+                {
+                    auto rqs = Protocol::Make_StartHW_Msg({}, _isHwStarted);
+                    _proto->AsyncSendRequest(rqs, [](const boost::system::error_code&, const ExtIO_TCP_Proto::Message&, int64_t) {});
+                }
             };
 
             _proto->AsyncSendRequest(msg, std::move(h));
@@ -472,8 +479,11 @@ namespace
                 Protocol::Make_StartHW_Msg({}, extLOfreq));
             if (responce.has_starthw()) {
                 auto const& msg = responce.starthw();
-                if (msg.has_result())
+                if (msg.has_result()) {
+                    if (msg.result() > 0)
+                        _isHwStarted = extLOfreq;
                     return msg.result();
+                }
             }
             return -1;
         }
@@ -481,6 +491,7 @@ namespace
         void StopHW(void) override
         {
             LOG(trace) << "StopHW is called.";
+            _isHwStarted = -1;
             SyncSendRequest(Protocol::Make_StopHW_Msg({}));
         }
 

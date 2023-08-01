@@ -119,7 +119,7 @@ namespace
 		{
 			InitGlobals();
 
-			for (size_t i = 0; i < 1; ++i)
+			for (size_t i = 0; i < 2; ++i)
 			{
 				std::string threadName = std::format("eio2tcp#{}", i);
 				_pool.emplace_back([this, threadName]() {threadProc(threadName); });
