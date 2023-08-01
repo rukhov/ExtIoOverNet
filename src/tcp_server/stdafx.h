@@ -31,6 +31,8 @@
 #include <format>
 #include <thread>
 #include <future>
+#include <queue>
+#include <barrier>
 
 // boost
 
@@ -41,4 +43,6 @@
 #include <boost/program_options/cmdline.hpp>
 
 #include <boost/asio.hpp>
+
+#include <boost/thread/synchronized_value.hpp>
 

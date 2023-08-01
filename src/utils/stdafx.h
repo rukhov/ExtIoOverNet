@@ -28,6 +28,7 @@
 #include <queue>
 #include <functional>
 #include <filesystem>
+#include <barrier>
 
 // boost
 
@@ -47,3 +48,5 @@
 #include <boost/asio.hpp>
 
 #include <boost/crc.hpp>
+
+#include <boost/thread/synchronized_value.hpp>

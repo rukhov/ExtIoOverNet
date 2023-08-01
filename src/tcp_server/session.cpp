@@ -24,6 +24,7 @@
 #include "../utils/Protocol.h"
 #include "../utils/IsAlive.h"
 #include "../utils/log.h"
+#include "../utils/GlobalDefs.h"
 #include "ExtIO_DLL.h"
 #include "options.h"
 #include "WindowsMessageLoop.h"
@@ -358,7 +359,7 @@ namespace
 
             return Protocol::Make_Hello_Msg(
                 Protocol::c_protocolVersion,
-                "ExtIO_TCP_server.dll");
+                std::string(c_appName) + "-" + c_versionString);
         }
 
         std::optional<ExtIO_TCP_Proto::Message> OnLoadExtIOApi(const ExtIO_TCP_Proto::Message& inmsg, int64_t did)
@@ -424,9 +425,9 @@ namespace
                         // Because it creates some UI widgets which require 
                         // a message loop to function properly.
                         auto [p, f] = MakePFPair<bool>();
-                        _msgLoop->post([this, a = AliveFlag(), p]() mutable {
+                        _msgLoop->post([this, a = AliveFlag(), p=std::move(p)]() mutable {
                             if (!a.IsAlive()) return;
-                            p->set_value(_dll->OpenHW());
+                            p.set_value(_dll->OpenHW());
                             });
                         if (!f.get())
                         {
@@ -456,9 +457,9 @@ namespace
         {
             if (!_dll) return Protocol::Make_Error_Msg(ExtIO_TCP_Proto::ErrorCode::ExtIO_DllIsNotLoaded);
             auto [p, f] = MakePFPair<bool>();
-            _msgLoop->post([this, a = AliveFlag(), p]() mutable {
+            _msgLoop->post([this, a = AliveFlag(), p = std::move(p)]() mutable {
                 if (!a.IsAlive()) return;
-                p->set_value(_dll->OpenHW());
+                p.set_value(_dll->OpenHW());
                 });
             return Protocol::Make_OpenHW_Msg(f.get());
         }

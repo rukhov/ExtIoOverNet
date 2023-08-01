@@ -18,18 +18,15 @@
  *****************************************************************************/
 
 #include "WindowsMessageLoop.h"
-#include "../utils/Mutexed.h"
 
 #include <windows.h>
-#include <queue>
-#include <barrier>
 
 namespace
 {
     class MainWidget : public IMessageLoop
     {
         std::thread _thread;
-        Mutexed<std::queue<IMessageLoop::task_t>> _taskQueue;
+        boost::synchronized_value<std::queue<IMessageLoop::task_t>> _taskQueue;
         UINT _newTaskMsg = ::RegisterWindowMessage("ExtIOoverNet-IMessageLoop-new-task");
         std::barrier<> _msgLoopSyncPoint;
 
@@ -53,7 +50,7 @@ namespace
 
         void post(task_t&& t) override
         {
-            _taskQueue.lock()->push(std::move(t));
+            _taskQueue->push(std::move(t));
             ::PostThreadMessage(::GetThreadId(_thread.native_handle()), _newTaskMsg, 0, 0);
         }
 
@@ -87,7 +84,7 @@ namespace
                 }
                 else if (msg.message == _newTaskMsg)
                 {
-                    auto q = _taskQueue.lock();
+                    auto q = _taskQueue.synchronize();
                     while (!q->empty())
                     {
                         auto t = std::move(q->front());

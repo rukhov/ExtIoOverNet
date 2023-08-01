@@ -20,6 +20,7 @@
 #include "stdafx.h"
 
 #include "../utils/log.h"
+#include "../utils/GlobalDefs.h"
 #include "options.h"
 #include "majordomo.h"
 
@@ -66,7 +67,7 @@ int do_run()
 int main(int argc, const char* argv[])
 {
 	std::cout
-		<< "ExtIO software radio API propagation over network.\n"
+		<< "ExtIO software radio API propagation over network. Version " << c_versionString << "\n"
 		<< "Copyright(C) 2023 Roman Ukhov <ukhov.roman@gmail.com>. All rights reserved.\n"
 		<< "This software is licensed under the GNU General Public License Version 3.\n\n"
 		<< "Command line options:\n"
