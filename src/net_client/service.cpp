@@ -44,7 +44,7 @@ namespace
         const Options& _options;
 
         std::unique_ptr<IConnection> _connection;
-        std::shared_ptr<Protocol::IParser> _proto;
+        std::unique_ptr<Protocol::IParser> _proto;
 
         deadline_timer _reconnect_timer;
         bool _connectingStarted = false;
@@ -70,6 +70,7 @@ namespace
 
         ~Service()
         {
+            Cancel();
             LOG(trace) << "Service destructed.";
             _work_guard.reset();
         }
@@ -94,7 +95,6 @@ namespace
             if (_proto) _proto->Cancel();
             if (_connection) _connection->Cancel();
             _connection->Close();
-            _proto.reset();
         }
 
         void Connect(IConnection::CbT&& cb)

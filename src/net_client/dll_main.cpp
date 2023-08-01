@@ -93,7 +93,12 @@ namespace
 			static std::once_flag flag;
 			std::call_once(flag, [this]() {
 				if (auto srv = GetService().lock())
-					srv->Stop();
+				{
+					auto& ref = *srv;
+					srv.reset(); // prevent destruction in this thread
+					ref.Stop();
+				}
+
 				for (auto& t : _pool)
 				{
 					if (t.joinable())
@@ -114,7 +119,7 @@ namespace
 		{
 			InitGlobals();
 
-			for (size_t i = 0; i < 2; ++i)
+			for (size_t i = 0; i < 1; ++i)
 			{
 				std::string threadName = std::format("eio2tcp#{}", i);
 				_pool.emplace_back([this, threadName]() {threadProc(threadName); });

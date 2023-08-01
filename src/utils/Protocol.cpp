@@ -102,6 +102,11 @@ namespace
 
         }
 
+        ~ProtoImpl()
+        {
+            Cancel();
+        }
+
     private:
 
         auto AliveFlag()
