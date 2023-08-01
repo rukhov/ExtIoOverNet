@@ -110,8 +110,15 @@ namespace
 
         void Cancel() override
         {
-            _host_resolver.cancel();
-            _socket.cancel();
+            try
+            {
+                _host_resolver.cancel();
+                if(_socket.is_open())_socket.cancel();
+            }
+            catch (const std::exception& e)
+            {
+                LOG(warning) << e.what();
+            }
             _resolve_result = {};
             _asyncReadRecursionCounter = 0;
             _asyncWriteRecursionCounter = 0;
