@@ -62,8 +62,9 @@ public:
     // All calls from other thread
     // Blocking calls
 
-    virtual bool Start() = 0;
+    virtual void Start() = 0;
     virtual void Stop() = 0;
+    virtual bool IsConnected() const = 0;
 };
 
 

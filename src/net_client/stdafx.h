@@ -41,3 +41,5 @@
 #include <boost/log/sources/logger.hpp>
 
 #include <boost/asio.hpp>
+
+#include <boost/thread/synchronized_value.hpp>

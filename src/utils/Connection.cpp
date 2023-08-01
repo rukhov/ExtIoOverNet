@@ -113,6 +113,23 @@ namespace
             _host_resolver.cancel();
             _socket.cancel();
             _resolve_result = {};
+            _asyncReadRecursionCounter = 0;
+            _asyncWriteRecursionCounter = 0;
+            while(!_readQueue.empty())
+            {
+                auto cb = std::move(_readQueue.front());
+                _readQueue.pop();
+                cb.cb(std::make_error_code(std::errc::operation_canceled));
+
+            }
+            _writeQueue = {};
+            while (!_writeQueue.empty())
+            {
+                auto cb = std::move(_writeQueue.front());
+                _writeQueue.pop();
+                cb.cb(std::make_error_code(std::errc::operation_canceled));
+
+            }
 
             if (_socket.is_open())
                 _socket.cancel();
@@ -397,8 +414,6 @@ namespace
             _isConnected = true;
 
             SetupOptions();
-
-            LOG(trace) << "Connected.";
 
             cb(error);
         }

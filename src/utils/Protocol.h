@@ -52,10 +52,10 @@ namespace Protocol
     std::unique_ptr<IParser> MakeParser(IConnection&);
 
     template<typename T>
-    std::tuple<std::shared_ptr<std::promise<T>>, std::future<T>> MakePFPair()
+    std::tuple<std::promise<T>, std::future<T>> MakePFPair()
     {
-        auto p = std::make_shared<std::promise<T>>();
-        auto f = p->get_future();
+        auto p = std::promise<T>();
+        auto f = p.get_future();
         return std::make_tuple<>(std::move(p), std::move(f));
     }
 }
