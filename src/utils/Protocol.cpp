@@ -339,8 +339,10 @@ namespace Protocol
 {
     std::string const& IParser::GetMessageName(const ExtIO_TCP_Proto::Message& msg)
     {
-        if (!msg.IsInitialized())
-            return "<Uninitialized>";
+        if (!msg.IsInitialized()) {
+            static std::string un = "<Uninitialized>";
+            return un;
+        }
         auto const contentField = ExtIO_TCP_Proto::Message::descriptor()->field(msg.Content_case() - 1);
         return contentField->name();
     }
