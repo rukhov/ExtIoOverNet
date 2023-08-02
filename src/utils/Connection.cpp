@@ -389,13 +389,31 @@ namespace
 
             LOG(trace) << "Host <" << _hostName << "> is resolved.";
 
+            {
+                std::string text;
+                for (const auto& r : results) {
+                    text += "<" + r.endpoint().address().to_string() + ">; ";
+                }
+                LOG(trace) << "Host <" << _hostName << "> is resolved to: " << text;
+            }
+
             _resolve_result = results;
 
             auto endp = _resolve_result.begin();
 
-            LOG(trace) << "Connecting to <" << endp->host_name()
-                << ":" << _port
-                << ">.";
+            {
+                // find ip v4 endpoint
+                for(auto p = _resolve_result.begin(); p != _resolve_result.end(); ++p)
+                {
+                    auto prtc = p->endpoint().protocol();
+                    if (prtc == boost::asio::ip::tcp::v4()) {
+                        endp = p;
+                        break;
+                    }
+                }
+            }
+
+            LOG(trace) << "Connecting to <" << endp->endpoint() << ">.";
 
             _socket.async_connect(*endp,
                 [this, endp, cb = std::move(cb), a = AliveFlag()](const boost::system::error_code& error) mutable {
