@@ -1,5 +1,5 @@
 # ExtIoOverNet
-This software is intended to transmit IQ data from the different Software Defined Radios (SDR) across the network and receive it on another end for further process the data. As example I have a great SDR receiver SDRPlay RSP1A. It is placed in the roof flor of my house near to the antennas. I want to connect it to the network and be able to listen this radio remotely at my cabinet.
+This software is intended to stream IQ data from the different Software Defined Radios (SDR) across the TCP network. Receive it on another end for further process the data. As example I have a great SDR receiver SDRPlay RSP1A. It is placed in the roof flor of my house near to the antennas. I want to connect it to the network and be able to listen this radio remotely at my cabinet.
 ExtIoOverNet software consists of two components. First is the ExtIO_OverNetServer.exe - this is a server that run on the machive to which the SDR is connected to. Second is a ExtIO_OverNetClient.dll - the client ExtIO API dll that is installed on the remote machine where is installed your favorite SDR software like HDSDR.
 The important pecondition is that the SDR drivers and the SDR software both should support the ExtIO API.
 ## Build
