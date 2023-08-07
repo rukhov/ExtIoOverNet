@@ -33,7 +33,7 @@ endif()
 
 set( PROTOBUF_ROOT ${Protobuf_INSTALL_DIR})
 set( Protobuf_INCLUDE_DIR ${PROTOBUF_ROOT}/include )
-set( Protobuf_LIBRARY_DEBUG ${PROTOBUF_ROOT}/lib/libprotobufd.lib )
+#set( Protobuf_LIBRARY_DEBUG ${PROTOBUF_ROOT}/lib/libprotobufd.lib )
 #set( Protobuf_LITE_LIBRARY_DEBUG ${PROTOBUF_ROOT}/Debug/libprotobuf-lited.lib )
 
 message( "Protobuf_INCLUDE_DIR: " ${Protobuf_INCLUDE_DIR} )
@@ -43,6 +43,8 @@ message( "CMAKE_BINARY_DIR: " ${CMAKE_BINARY_DIR})
 include(FindProtobuf)
 #find_package(Protobuf REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
+
+# ==========================================================================
 
 find_package(Boost
   1.82.0
