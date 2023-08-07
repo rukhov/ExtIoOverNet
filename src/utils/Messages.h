@@ -333,4 +333,12 @@ namespace Protocol
         *msg.mutable_extiogetbandwidth() = thisMsg;
         return msg;
     }
+
+    inline ExtIO_TCP_Proto::Message Make_Ping_Msg()
+    {
+        ExtIO_TCP_Proto::Message msg;
+        ExtIO_TCP_Proto::RqsPing thisMsg;
+        *msg.mutable_ping() = thisMsg;
+        return msg;
+    }
 }

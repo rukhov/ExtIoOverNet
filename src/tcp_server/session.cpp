@@ -155,6 +155,7 @@ namespace
         HW_cache _hwCache;
         unsigned _callBackHandle = -1;
         std::unique_ptr<IMessageLoop> _msgLoop;
+        boost::asio::steady_timer _keepAliveTimer;
 
     public:
 
@@ -165,8 +166,13 @@ namespace
             , _connection(MakeConnection(_ctx->_strand))
             , _proto(Protocol::MakeParser(*_connection))
             , _msgLoop(MakeMessageLoop())
+            , _keepAliveTimer(_ctx->_strand)
         {
+            LOG(info) << "Session created for remote host: " << socket.remote_endpoint().address();
+
             _connection->Attach(std::move(socket));
+
+            ResetKeepAliveTimer();
         }
 
         ~Session()
@@ -175,7 +181,25 @@ namespace
             LOG(info) << "Session destroyed.";
         }
 
-        auto AliveFlag()
+        void ResetKeepAliveTimer()
+        {
+            _keepAliveTimer. expires_from_now(std::chrono::milliseconds(c_pingPeriodMs * 2));
+            _keepAliveTimer.async_wait(
+                [this, a = AliveFlag()](const boost::system::error_code& ec) {
+                    if (ec == boost::asio::error::operation_aborted) return;
+                    if (!a.IsAlive()) return;
+                    KeepAliveTimedout(ec);
+                }
+            );
+        }
+
+        void KeepAliveTimedout(const boost::system::error_code& ec)
+        {
+            LOG(info) << "Connection timedout.";
+            OnCommunicationError(std::make_error_code(std::errc::timed_out));
+        }
+
+        ::AliveFlag AliveFlag()
         {
             return ::AliveFlag(_inst);
         }
@@ -273,6 +297,8 @@ namespace
             if (ec.failed())
                 return OnCommunicationError(ec);
 
+            ResetKeepAliveTimer();
+
             LOG(trace) << "New request [" << did << "] (" << _proto->GetMessageName(msg) << ") received...";
             std::optional<ExtIO_TCP_Proto::Message> responce;
             switch (msg.Content_case())
@@ -326,6 +352,8 @@ namespace
                 responce = OnHideGUI(msg); break;
             case ExtIO_TCP_Proto::Message::ContentCase::kSwitchGUI:
                 responce = OnSwitchGUI(msg); break;
+            case ExtIO_TCP_Proto::Message::ContentCase::kPing:
+                responce = OnPing(msg); break;
             default:
                 responce = OnUnhandledMessage(msg);
             }
@@ -678,6 +706,12 @@ namespace
                 return Protocol::Make_Error_Msg(ExtIO_TCP_Proto::ErrorCode::InvalidArgument);
             auto result = _dll->ExtIoGetBandwidth(msg.srate_idx());
             return Protocol::Make_ExtIoGetBandwidth_Msg(result, {});
+        }
+
+        std::optional<ExtIO_TCP_Proto::Message> OnPing(const ExtIO_TCP_Proto::Message& request) {
+            //auto const& msg = request.ping();
+            //return Protocol::Make_Ping_Msg();
+            return request;
         }
 
     private:

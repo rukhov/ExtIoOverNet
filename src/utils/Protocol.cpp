@@ -279,7 +279,7 @@ namespace
             AddReadHandler(did, std::move(h));
         }
 
-        void AsyncSendRequest(const ExtIO_TCP_Proto::Message& msg, OnMsgCb_T&& h) override
+        int64_t AsyncSendRequest(const ExtIO_TCP_Proto::Message& msg, OnMsgCb_T&& h) override
         {
             ExtIO_TCP_Proto::PackagedMessage package;
 
@@ -307,6 +307,7 @@ namespace
             SerializePackage(package, *p);
             p->set_packet_type(PacketBuffer::PacketType::Message);
             _connection.AsyncWritePacket(p, std::move(requestHandler));
+            return did;
         }
 
         void AsyncSendResponce(const ExtIO_TCP_Proto::Message& msg, int64_t did, AsyncCb_T&& h) override

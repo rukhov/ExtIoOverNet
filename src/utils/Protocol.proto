@@ -47,6 +47,10 @@ message RqsError {
 	optional ErrorCode error = 1;
 }
 
+message RqsPing {
+	
+}
+
 message RqsLoadExtIOApi {
 }
 
@@ -195,6 +199,7 @@ message Message {
 		RqsExtIoGetActualSrateIdx ExtIoGetActualSrateIdx = 25;
 		RqsExtIoSetSrate	ExtIoSetSrate = 26;
 		RqsExtIoGetBandwidth ExtIoGetBandwidth = 27;
+		RqsPing				Ping = 28;
 	}
 }
 

@@ -22,3 +22,4 @@
 constexpr static char c_versionString[] = "1.0.0";
 constexpr static char c_appName[] = "ExtIoOverNet";
 constexpr static char c_clientOptionsFileName[] = "ExtIO_OverNetClient.cfg";
+constexpr unsigned c_pingPeriodMs = 7243;

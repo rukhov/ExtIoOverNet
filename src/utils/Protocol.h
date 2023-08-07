@@ -43,7 +43,7 @@ namespace Protocol
         virtual void AsyncReceiveRequest(OnMsgCb_T&&) = 0;
         virtual void AsyncReceiveResponce(int64_t did, OnMsgCb_T&&) = 0;
         virtual void AsyncDisconnect(AsyncCb_T&& cb) = 0;
-        virtual void AsyncSendRequest(const ExtIO_TCP_Proto::Message& msg, OnMsgCb_T&& handler) = 0;
+        virtual int64_t AsyncSendRequest(const ExtIO_TCP_Proto::Message& msg, OnMsgCb_T&& handler) = 0;
         virtual void AsyncSendResponce(const ExtIO_TCP_Proto::Message& msg, int64_t did, AsyncCb_T&& handler) = 0;
         virtual void AsyncSendMessage(std::unique_ptr<ExtIO_TCP_Proto::Message>&& msg, AsyncCb_T&& handler) = 0;
     };

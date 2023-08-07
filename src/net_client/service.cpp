@@ -53,6 +53,7 @@ namespace
         std::atomic_long _isHwStarted = -1;
         boost::synchronized_value<pfnExtIOCallback> _pfnExtIOCallback = nullptr;
         std::vector<std::promise<bool>> _initWaiters;
+        boost::asio::steady_timer _pingTimer;
 
         AliveInstance _inst;
 
@@ -63,10 +64,18 @@ namespace
             , _work_guard(std::make_unique<work_guard_type>(asio::make_work_guard(_strand)))
             , _options(opts)
             , _reconnect_timer(_strand)
+            , _pingTimer(_strand)
         {
             LOG(trace) << "Service constructed.";
 
             _connection = MakeConnection(_strand);
+
+            _pingTimer.async_wait([this, a = AliveFlag()](const boost::system::error_code& ec) {
+                if (ec == boost::asio::error::operation_aborted) return;
+                if (!a.IsAlive()) return;
+                if (!_connectionEstablished) return;
+                Ping(ec); 
+                });
         }
 
         ~Service()
@@ -76,7 +85,7 @@ namespace
             _work_guard.reset();
         }
 
-        auto AliveFlag()
+        ::AliveFlag AliveFlag()
         {
             return ::AliveFlag(_inst);
         }
@@ -133,6 +142,34 @@ namespace
             return false;
         }
 
+        void ResetKeepAliveTimer()
+        {
+            _pingTimer.expires_from_now(std::chrono::milliseconds(c_pingPeriodMs));
+            _pingTimer.async_wait([this, a = AliveFlag()](const boost::system::error_code& ec) {
+                if (ec == boost::asio::error::operation_aborted) return;
+                if (!a.IsAlive()) return;
+                if (!_connectionEstablished) return;
+                Ping(ec);
+                });
+        }
+
+        void Ping(const boost::system::error_code& e)
+        {
+            auto msg = Protocol::Make_Ping_Msg();
+
+            auto start = std::chrono::steady_clock::now();
+
+            auto h = [this, a = AliveFlag(), start=std::move(start)]
+            (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
+                if (!a.IsAlive()) return;
+                auto d = std::chrono::steady_clock::now() - start;
+                LOG(trace) << "Ping time: " << std::chrono::duration_cast<std::chrono::milliseconds>(d).count() << "ms";
+                ResetKeepAliveTimer();
+            };
+
+            AsyncSendRequest(msg, std::move(h));
+        }
+
         void OnConnected(const boost::system::error_code& ec, IConnection::CbT&& cb)
         {
             if (!CheckErrorCode(ec))
@@ -143,6 +180,8 @@ namespace
             _connectionEstablished = true;
 
             _proto = Protocol::MakeParser(*_connection);
+
+            Ping({});
 
             //AsyncReadData();
             AsyncReadRequest();
@@ -160,7 +199,7 @@ namespace
                 if (cb) cb(e);
             };
 
-            _proto->AsyncSendRequest(msg, std::move(h));
+            AsyncSendRequest(msg, std::move(h));
         }
 
         void OnDisconnected()
@@ -297,11 +336,11 @@ namespace
                 if (_isHwStarted > 0)
                 {
                     auto rqs = Protocol::Make_StartHW_Msg({}, _isHwStarted);
-                    _proto->AsyncSendRequest(rqs, [](const boost::system::error_code&, const ExtIO_TCP_Proto::Message&, int64_t) {});
+                    AsyncSendRequest(rqs, [](const boost::system::error_code&, const ExtIO_TCP_Proto::Message&, int64_t) {});
                 }
             };
 
-            _proto->AsyncSendRequest(msg, std::move(h));
+            AsyncSendRequest(msg, std::move(h));
 
             return {};
         }
@@ -408,7 +447,7 @@ namespace
 
             asio::defer(_strand, [this, a = AliveFlag(), h = std::move(h)]() mutable {
                 if (!a.IsAlive() || !_connectionEstablished) return;
-                _proto->AsyncSendRequest(Protocol::Make_InitHW_Msg({}, {}, {}, {}), std::move(h));
+                AsyncSendRequest(Protocol::Make_InitHW_Msg({}, {}, {}, {}), std::move(h));
                 });
 
             auto msg = f.get();
@@ -508,6 +547,19 @@ namespace
             f.get();
         }
 
+        int64_t AsyncSendRequest(const ExtIO_TCP_Proto::Message& msg, Protocol::OnMsgCb_T&& h)
+        {
+            auto retVal = _proto->AsyncSendRequest(msg, std::move(h));
+            ResetKeepAliveTimer();
+            return retVal;
+        }
+
+        void AsyncSendResponce(const ExtIO_TCP_Proto::Message& msg, int64_t did, Protocol::AsyncCb_T&& h)
+        {
+            _proto->AsyncSendResponce(msg, did, std::move(h));
+            ResetKeepAliveTimer();
+        }
+
         ExtIO_TCP_Proto::Message SyncSendRequest(ExtIO_TCP_Proto::Message&& rqs)
         {
             LOG(trace) << "New request: " << Protocol::IParser::GetMessageName(rqs);
@@ -528,7 +580,8 @@ namespace
                     h({}, {}, -1);
                     return;
                 }
-                _proto->AsyncSendRequest(rqs, std::move(h));
+                AsyncSendRequest(rqs, std::move(h));
+                ResetKeepAliveTimer();
                 });
             auto responce = std::move(f.get());
             LOG(trace)
@@ -555,7 +608,8 @@ namespace
                     h({});
                     return;
                 }
-                _proto->AsyncSendResponce(rqs, 0, std::move(h));
+                AsyncSendResponce(rqs, 0, std::move(h));
+                ResetKeepAliveTimer();
                 });
             f.get();
         }
