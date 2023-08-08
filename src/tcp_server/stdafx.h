@@ -33,6 +33,7 @@
 #include <future>
 #include <queue>
 #include <barrier>
+#include <latch>
 
 // boost
 

@@ -28,7 +28,7 @@ namespace
         std::thread _thread;
         boost::synchronized_value<std::queue<IMessageLoop::task_t>> _taskQueue;
         UINT _newTaskMsg = ::RegisterWindowMessage("ExtIOoverNet-IMessageLoop-new-task");
-        std::barrier<> _msgLoopSyncPoint;
+        std::latch _msgLoopSyncPoint;
 
     public:
 
