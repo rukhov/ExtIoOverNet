@@ -20,8 +20,9 @@
 #pragma once
 
 #include <memory>
+#include <type_traits>
 
-class AliveInstance final
+class AliveInstance
 {
     using flag_ptr = std::shared_ptr<bool>;
     flag_ptr _flag;
@@ -42,6 +43,42 @@ public:
     ~AliveInstance()
     {
         *_flag = false;
+    }
+
+    template<typename FuncT>
+    class FunctionWrapper final
+    {
+        using fnT = std::decay_t<FuncT>;
+        flag_ptr _flag;
+        fnT _func;
+
+        bool check() const { return *_flag; }
+
+    public:
+
+        FunctionWrapper(flag_ptr const& flag, FuncT fn)
+            : _func(std::forward<FuncT>(fn))
+            , _flag(flag) {}
+
+        template<typename ...Args>
+        auto operator () (Args... args)
+        {
+            if (!check()) return std::invoke_result_t<fnT, Args...>();
+            return _func(std::forward<Args>(args)...);
+        }
+
+        template<typename ...Args>
+        auto operator () (Args... args) const
+        {
+            if (!check()) return std::invoke_result_t<fnT, Args...>();
+            return _func(std::forward<Args>(args)...);
+        }
+    };
+
+    template<typename FnT>
+    auto Wrap(FnT fn)
+    {
+        return FunctionWrapper<FnT>(_flag, std::forward<FnT>(fn));
     }
 };
 

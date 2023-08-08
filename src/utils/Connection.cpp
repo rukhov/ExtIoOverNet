@@ -26,7 +26,7 @@
 
 namespace
 {
-    class Connection : public IConnection
+    class Connection : public IConnection, AliveInstance
     {
         using socket_type = boost::asio::ip::tcp::socket;
         using resolver_type = boost::asio::ip::tcp::resolver;
@@ -40,7 +40,6 @@ namespace
         std::string _hostName;
         uint16_t _port;
         std::atomic_bool _isConnected = false;
-        AliveInstance _inst;
         std::atomic_uint _asyncReadRecursionCounter = { 0 };
         std::atomic_uint _asyncWriteRecursionCounter = { 0 };
         uint64_t _nextPacketId = 0;
@@ -69,11 +68,6 @@ namespace
 
     private:
 
-        auto AliveFlag()
-        {
-            return ::AliveFlag(_inst);
-        }
-
         uint64_t nextPackedId()
         {
             return _nextPacketId++;
@@ -90,11 +84,10 @@ namespace
 
             _host_resolver.async_resolve(
                 host, std::to_string(port),
-                [this, cb = std::move(cb), a=AliveFlag()](const boost::system::error_code& error, resolve_results_type results) mutable
+                Wrap([this, cb = std::move(cb)](const boost::system::error_code& error, resolve_results_type results) mutable
                 { 
-                    if (!a.IsAlive()) return;
                     OnResolved(error, results, std::move(cb)); 
-                });
+                }));
         }
 
         void Attach(boost::asio::ip::tcp::socket&& socket) override
@@ -163,13 +156,12 @@ namespace
             }
 
             boost::asio::defer(_strand, 
-                [this, cb = std::move(cb), a = AliveFlag()]() mutable {
-                    if (!a.IsAlive()) return;
+                Wrap([this, cb = std::move(cb)]() mutable {
                     _isConnected = false;
                     if (_socket.is_open()) _socket.close();
                     _resolve_result = {};
                     cb({});
-                });
+                }));
         }
 
         bool IsConnected() const override
@@ -206,10 +198,9 @@ namespace
             ++_asyncWriteRecursionCounter;
 
             boost::asio::async_write(_socket, boost::asio::const_buffer(buf->head_data(), buf->raw_size()),
-                [this, buf, cb = std::move(cb),a = AliveFlag()]
+                Wrap([this, buf, cb = std::move(cb)]
                 (const boost::system::error_code& ec, std::size_t bytes_transferred) mutable
                 {
-                    if (!a.IsAlive()) return;
                     {
                         AtScopeExit _([a = &_asyncWriteRecursionCounter]() { --(*a);  });
                         if (ec.failed())
@@ -223,15 +214,6 @@ namespace
                             if (cb) cb(std::make_error_code(std::errc::io_error));
                             return;
                         }
-                        /*
-                        LOG(trace) << "Packet sent, type: "
-                            << (int)buf->packet_type()
-                            << "; packet_size: " << buf->packet_size()
-                            << "; size: " << buf->size()
-                            << "; crc1: " << buf->calc_crc()
-                            << "; crc2: " << buf->get_crc()
-                            << "; id: " << buf->get_id();
-                            */
                     }
 
                     queue_item nextTask;
@@ -239,7 +221,6 @@ namespace
                     if (!_writeQueue.empty())
                     {
                         nextTask = std::move(_writeQueue.front());
-                        //LOG(trace) << "Dequeued write operation, queue size: " << _writeQueue.size();
                         _writeQueue.pop();
                     }
 
@@ -247,7 +228,7 @@ namespace
 
                     if (nextTask.buf)
                         AsyncWritePacket(nextTask.buf, std::move(nextTask.cb));
-                });
+                }));
         }
 
         void AsyncReadPacket(const buffer_ptr& buf, CbT&& cb) override
@@ -263,10 +244,9 @@ namespace
             ++_asyncReadRecursionCounter;
 
             boost::asio::async_read(_socket, boost::asio::mutable_buffer(buf->head_data(), buf->head_size()),
-            [this, buf, cb = std::move(cb), a = AliveFlag()]
+            Wrap([this, buf, cb = std::move(cb)]
             (const boost::system::error_code& ec, std::size_t bytes_transferred) mutable
                 {
-                    if (!a.IsAlive()) return;
                     if (ec.failed())
                     {
                         if (cb) cb(ec);
@@ -297,10 +277,9 @@ namespace
                     boost::asio::async_read(
                         _socket, boost::asio::mutable_buffer(buf->data(), buf->size()),
                         boost::asio::transfer_exactly(buf->size()),
-                    [this, buf, cb = std::move(cb), a = AliveFlag()]
+                    Wrap([this, buf, cb = std::move(cb)]
                     (const boost::system::error_code& ec, std::size_t bytes_transferred) mutable
                         {
-                            if (!a.IsAlive()) return;
                             if (ec.failed())
                             {
                                 if (cb) cb(ec);
@@ -344,8 +323,8 @@ namespace
 
                             if (nextTask.buf)
                                 AsyncReadPacket(nextTask.buf, std::move(nextTask.cb));
-                        });
-                });
+                        }));
+                }));
         }
 
     private:
@@ -416,10 +395,9 @@ namespace
             LOG(trace) << "Connecting to <" << endp->endpoint() << ">.";
 
             _socket.async_connect(*endp,
-                [this, endp, cb = std::move(cb), a = AliveFlag()](const boost::system::error_code& error) mutable {
-                    if (!a.IsAlive()) return;
+                Wrap([this, endp, cb = std::move(cb)](const boost::system::error_code& error) mutable {
                     OnConnect(error, endp, std::move(cb));
-                });
+                }));
         }
 
         void OnConnect(const boost::system::error_code& error, resolve_results_type::iterator it, CbT&& cb)

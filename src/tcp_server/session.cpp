@@ -143,7 +143,7 @@ namespace
         }
     };
 
-    class Session : public ISession, public std::enable_shared_from_this<Session>
+    class Session : public ISession, public std::enable_shared_from_this<Session>, AliveInstance
     {
         std::shared_ptr<exec_ctx> _ctx;
         std::shared_ptr<Session> _this;
@@ -151,7 +151,6 @@ namespace
         std::unique_ptr<IParser> _proto;
         std::unique_ptr<ExtIO_Dll> _dll;
         bool _bOpenHWSuccidded = false;
-        AliveInstance _inst;
         HW_cache _hwCache;
         unsigned _callBackHandle = -1;
         std::unique_ptr<IMessageLoop> _msgLoop;
@@ -185,11 +184,10 @@ namespace
         {
             _keepAliveTimer. expires_from_now(std::chrono::milliseconds(c_pingPeriodMs * 2));
             _keepAliveTimer.async_wait(
-                [this, a = AliveFlag()](const boost::system::error_code& ec) {
+                Wrap([this](const boost::system::error_code& ec) {
                     if (ec == boost::asio::error::operation_aborted) return;
-                    if (!a.IsAlive()) return;
                     KeepAliveTimedout(ec);
-                }
+                })
             );
         }
 
@@ -199,10 +197,7 @@ namespace
             OnCommunicationError(std::make_error_code(std::errc::timed_out));
         }
 
-        ::AliveFlag AliveFlag()
-        {
-            return ::AliveFlag(_inst);
-        }
+        //::AliveFlag AliveFlag(){return ::AliveFlag(_inst); }
 
         void AsyncStart()
         {
@@ -228,12 +223,9 @@ namespace
             }
 
             _connection->AsyncDisconnect(
-                [this, a = AliveFlag()](const boost::system::error_code& ec)
+                Wrap([this](const boost::system::error_code& ec)
                 {
-                    LOG(trace) << "Session destroing is in a progress, alive: " << a.IsAlive();
-
-                    if (!a.IsAlive())
-                        return;
+                    LOG(trace) << "Session destroing is in a progress";
 
                     if (_dll && _bOpenHWSuccidded)
                     {
@@ -246,7 +238,7 @@ namespace
 
                     _bOpenHWSuccidded = false;
                     _this.reset();
-                });
+                }));
         }
 
         // ISession
@@ -268,11 +260,8 @@ namespace
 
         AsyncCb_T OnServingRequestFinishedCB()
         {
-            return [this, a = AliveFlag()](const boost::system::error_code& lastOperationEc)
+            return Wrap([this](const boost::system::error_code& lastOperationEc)
             {
-                if (!a.IsAlive())
-                    return;
-
                 if (lastOperationEc.failed())
                 {
                     AsyncDestroySession("Last operation failed: " + lastOperationEc.message());
@@ -282,13 +271,10 @@ namespace
                 LOG(trace) << "Ready to serve.";
 
                 _proto->AsyncReceiveRequest(
-                    [this, a = AliveFlag()]
-                    (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& msg, int64_t did) {
-                        if (!a.IsAlive())
-                            return;
+                    [this] (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& msg, int64_t did) {
                         OnMessage(ec, msg, did);
                     });
-            };
+            });
         }
 
         //
@@ -405,21 +391,18 @@ namespace
 
             asio::post(
                 _ctx->_strand,
-                [this, a = AliveFlag(), did] () {
-                    if (!a.IsAlive() || !_dll) return;
+                Wrap([this, did] () {
+                    if (!_dll) return;
 
-                    auto onFail = [this, a, did]
+                    auto onFail = Wrap([this, did]
                     (std::string text, ExtIO_TCP_Proto::ErrorCode ec) mutable {
-                        if (!a.IsAlive()) return;
-                        //AsyncDestroySession(text);
                         auto msg = Protocol::Make_LoadExtIOApi_Msg(ec);
                         _proto->AsyncSendResponce(msg, did, 
-                            [this, text, a](const boost::system::error_code& ec) mutable {
-                                if (!a.IsAlive()) return;
+                            Wrap([this, text](const boost::system::error_code& ec) mutable {
                                 AsyncDestroySession(text);
-                            }
+                            })
                         );
-                    };
+                    });
 
                     char arg1[128];
                     char arg2[128];
@@ -453,10 +436,9 @@ namespace
                         // Because it creates some UI widgets which require 
                         // a message loop to function properly.
                         auto [p, f] = MakePFPair<bool>();
-                        _msgLoop->post([this, a = AliveFlag(), p=std::move(p)]() mutable {
-                            if (!a.IsAlive()) return;
+                        _msgLoop->post(Wrap([this, p=std::move(p)]() mutable {
                             p.set_value(_dll->OpenHW());
-                            });
+                            }));
                         if (!f.get())
                         {
                             onFail("OpenHW was FAILED.", ExtIO_TCP_Proto::ErrorCode::LogicError);
@@ -471,7 +453,7 @@ namespace
                     auto msg = Protocol::Make_LoadExtIOApi_Msg(ExtIO_TCP_Proto::ErrorCode::Success);
                     _proto->AsyncSendResponce(msg, did, OnServingRequestFinishedCB());
                 }
-            );
+            ));
             return {};
         }
 
@@ -485,10 +467,9 @@ namespace
         {
             if (!_dll) return Protocol::Make_Error_Msg(ExtIO_TCP_Proto::ErrorCode::ExtIO_DllIsNotLoaded);
             auto [p, f] = MakePFPair<bool>();
-            _msgLoop->post([this, a = AliveFlag(), p = std::move(p)]() mutable {
-                if (!a.IsAlive()) return;
+            _msgLoop->post(Wrap([this, p = std::move(p)]() mutable {
                 p.set_value(_dll->OpenHW());
-                });
+                }));
             return Protocol::Make_OpenHW_Msg(f.get());
         }
 
@@ -553,12 +534,12 @@ namespace
             auto msg = Protocol::Make_ExtIOCallback_Msg(
                 cnt, status, IQoffs, IQdata, _hwCache.SampleSize());
 
-            boost::asio::dispatch(_ctx->_strand, [this, a = AliveFlag(), msg = std::move(msg)]() mutable {
-                if (!a.IsAlive() || !_bOpenHWSuccidded || !_proto) {
+            boost::asio::dispatch(_ctx->_strand, Wrap([this, msg = std::move(msg)]() mutable {
+                if (!_bOpenHWSuccidded || !_proto) {
                     return;
                 }
                 _proto->AsyncSendMessage(std::move(msg), [](const boost::system::error_code& ec) {});
-            });
+            }));
 
             return 0;
         }

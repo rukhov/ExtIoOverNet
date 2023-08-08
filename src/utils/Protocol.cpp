@@ -81,7 +81,7 @@ namespace
         pkg.MergeFromCodedStream(&in);
     }
 
-    class ProtoImpl : public Protocol::IParser
+    class ProtoImpl : public Protocol::IParser, AliveInstance
     {
         using RequestMapT = std::map<int64_t, OnMsgCb_T>;
 
@@ -91,8 +91,6 @@ namespace
         int64_t _nextDialogId = 0;
         RequestMapT _requestMap;
         OnMsgCb_T _requestHandler;
-
-        AliveInstance _inst;
 
     public:
 
@@ -108,11 +106,6 @@ namespace
         }
 
     private:
-
-        auto AliveFlag()
-        {
-            return ::AliveFlag(_inst);
-        }
 
         int64_t MakeDialogId()
         {
@@ -142,12 +135,10 @@ namespace
                 auto packet = std::make_shared<IConnection::buffer_type>();
                 AsyncReadPacket(
                     packet,
-                    [this, packet, a = AliveFlag()](const boost::system::error_code& ec)
+                    Wrap([this, packet](const boost::system::error_code& ec)
                     {
-                        if (!a.IsAlive())
-                            return;
                         OnAsyncReadDone(ec, packet); 
-                    }
+                    })
                 );
             }
         }
@@ -213,11 +204,9 @@ namespace
                 auto packet = std::make_shared<IConnection::buffer_type>();
                 AsyncReadPacket(
                     packet,
-                    [this, packet, a = AliveFlag()](const boost::system::error_code& ec) {
-                        if (!a.IsAlive())
-                            return;
+                    Wrap([this, packet](const boost::system::error_code& ec) {
                         OnAsyncReadDone(ec, packet);
-                    }
+                    })
                 );
             }
         }
@@ -226,13 +215,7 @@ namespace
         {
             assert(_readIsInProgress >= 0);
             ++_readIsInProgress;
-            _connection.AsyncReadPacket(
-                buf,
-                [this, cb = std::move(cb), a = AliveFlag()](const boost::system::error_code& ec) mutable {
-                    if (!a.IsAlive())
-                        return;
-                    cb(ec);
-                });
+            _connection.AsyncReadPacket(buf, std::move(cb));
         }
 
         // IParser
@@ -261,11 +244,9 @@ namespace
 
             AsyncReadPacket(
                 buf,
-                [this, buf, a = AliveFlag()](const boost::system::error_code& ec) {
-                    if (!a.IsAlive())
-                        return;
+                Wrap([this, buf](const boost::system::error_code& ec) {
                     OnAsyncReadDone(ec, buf);
-                }
+                })
             );
         }
 
@@ -289,11 +270,8 @@ namespace
             package.set_type(ExtIO_TCP_Proto::MsgType::Request);
             package.set_dialog_id(did);
 
-            auto requestHandler = [this, h = std::move(h), did, a = AliveFlag()]
+            auto requestHandler = Wrap([this, h = std::move(h), did]
             (const boost::system::error_code& ec) mutable {
-                if (!a.IsAlive())
-                    return;
-
                 if (ec.failed())
                 {
                     h(ec, {}, did);
@@ -301,7 +279,7 @@ namespace
                 }
 
                 AsyncReceiveResponce(did, std::move(h));
-            };
+            });
 
             auto p = std::make_shared<IConnection::buffer_type>();
             SerializePackage(package, *p);

@@ -28,9 +28,13 @@
 
 using namespace boost;
 
+int foo(int a) {
+    return a;
+}
+
 namespace
 {
-    class Service : public IService, public std::enable_shared_from_this<Service>
+    class Service : public IService, public std::enable_shared_from_this<Service>, AliveInstance
     {
         using strand_type = asio::strand<asio::io_context::executor_type>;
         using work_guard_type = asio::executor_work_guard<strand_type>;
@@ -55,9 +59,8 @@ namespace
         std::vector<std::promise<bool>> _initWaiters;
         boost::asio::steady_timer _pingTimer;
 
-        AliveInstance _inst;
-
     public:
+
 
         Service(boost::asio::strand<boost::asio::io_context::executor_type>&& strand, const Options& opts)
             : _strand(strand)
@@ -70,12 +73,13 @@ namespace
 
             _connection = MakeConnection(_strand);
 
-            _pingTimer.async_wait([this, a = AliveFlag()](const boost::system::error_code& ec) {
+            _pingTimer.async_wait(Wrap(
+                [this](const boost::system::error_code& ec) {
                 if (ec == boost::asio::error::operation_aborted) return;
-                if (!a.IsAlive()) return;
                 if (!_connectionEstablished) return;
                 Ping(ec); 
-                });
+                })
+            );
         }
 
         ~Service()
@@ -83,11 +87,6 @@ namespace
             Cancel();
             LOG(trace) << "Service destructed.";
             _work_guard.reset();
-        }
-
-        ::AliveFlag AliveFlag()
-        {
-            return ::AliveFlag(_inst);
         }
 
         void Init()
@@ -115,11 +114,10 @@ namespace
             _connectingStarted = true;
 
             _connection->Connect(_options.serverAddress, _options.serverPort, 
-                [this, a = AliveFlag(), cb = std::move(cb)](const boost::system::error_code& ec) mutable
+                Wrap([this, cb = std::move(cb)](const boost::system::error_code& ec) mutable
                 {
-                    if (!a.IsAlive()) return;
                     OnConnected(ec, std::move(cb));
-                }
+                })
             );
         }
 
@@ -145,12 +143,11 @@ namespace
         void ResetKeepAliveTimer()
         {
             _pingTimer.expires_from_now(std::chrono::milliseconds(c_pingPeriodMs));
-            _pingTimer.async_wait([this, a = AliveFlag()](const boost::system::error_code& ec) {
+            _pingTimer.async_wait(Wrap([this](const boost::system::error_code& ec) {
                 if (ec == boost::asio::error::operation_aborted) return;
-                if (!a.IsAlive()) return;
                 if (!_connectionEstablished) return;
                 Ping(ec);
-                });
+                }));
         }
 
         void Ping(const boost::system::error_code& e)
@@ -159,13 +156,12 @@ namespace
 
             auto start = std::chrono::steady_clock::now();
 
-            auto h = [this, a = AliveFlag(), start=std::move(start)]
+            auto h = Wrap([this, start=std::move(start)]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
-                if (!a.IsAlive()) return;
                 auto d = std::chrono::steady_clock::now() - start;
                 LOG(trace) << "Ping time: " << std::chrono::duration_cast<std::chrono::milliseconds>(d).count() << "ms";
                 ResetKeepAliveTimer();
-            };
+            });
 
             AsyncSendRequest(msg, std::move(h));
         }
@@ -192,12 +188,11 @@ namespace
                 Protocol::c_protocolVersion, 
                 std::string(c_appName) + "-" + c_versionString);
 
-            auto h = [this, a = AliveFlag(), cb = std::move(cb)]
+            auto h = Wrap([this, cb = std::move(cb)]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
-                if (!a.IsAlive()) return;
                 auto e = OnHello(ec, res, did);
                 if (cb) cb(e);
-            };
+            });
 
             AsyncSendRequest(msg, std::move(h));
         }
@@ -220,12 +215,10 @@ namespace
         void AsyncReadRequest()
         {
             _proto->AsyncReceiveRequest(
-                [this, a = AliveFlag()]
+                Wrap([this]
                 (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& msg, int64_t did) {
-                    if (!a.IsAlive())
-                        return;
                     OnMessage(ec, msg, did);
-                });
+                }));
         }
 
         void OnMessage(const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& msg, int64_t did)
@@ -275,22 +268,19 @@ namespace
                 }
 
                 _connection->AsyncDisconnect(
-                    [this, a = AliveFlag()](const boost::system::error_code& error) {
-                        if (!a.IsAlive()) return;
+                    Wrap([this](const boost::system::error_code& error) {
                         OnReconnect(error);
-                    });
+                    }));
             };
 
             if (!delayMs)
                 return restart();
             
-            _reconnect_timer.async_wait([this, a = AliveFlag(), restart = std::move(restart)](const boost::system::error_code& error) {
+            _reconnect_timer.async_wait(Wrap([this, restart = std::move(restart)](const boost::system::error_code& error) {
                 if (error.failed())
                     return;
-                if (!a.IsAlive())
-                    return;
                 restart();
-                });
+                }));
         }
 
         void OnReconnect(const boost::system::error_code& ec)
@@ -317,9 +307,8 @@ namespace
             auto msg = Protocol::Make_LoadExtIOApi_Msg(
                 ExtIO_TCP_Proto::ErrorCode::Unexpected);
 
-            auto h = [this, a = AliveFlag()]
+            auto h = Wrap([this]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& msg, int64_t did) mutable {
-                if (!a.IsAlive()) return;
                 LOG(trace) << "LoadExtIOApi responce received.";
                 _apiLoaded = true;
                 for (auto& w : _initWaiters)
@@ -338,7 +327,7 @@ namespace
                     auto rqs = Protocol::Make_StartHW_Msg({}, _isHwStarted);
                     AsyncSendRequest(rqs, [](const boost::system::error_code&, const ExtIO_TCP_Proto::Message&, int64_t) {});
                 }
-            };
+            });
 
             AsyncSendRequest(msg, std::move(h));
 
@@ -351,7 +340,7 @@ namespace
             auto fut = prm.get_future();
 
             asio::dispatch(_strand,
-                [this, prm = std::move(prm), a = AliveFlag()]() mutable {
+                [this, prm = std::move(prm), a = ::AliveFlag(*this)]() mutable {
                     if (!a.IsAlive())
                     {
                         prm.set_value(false);
@@ -375,11 +364,10 @@ namespace
         void Start() override
         {
             asio::dispatch(_strand, 
-                [this, a = AliveFlag()]() {
-                    if (!a.IsAlive()) return;
+                Wrap([this]() {
                     if (!_connectionEstablished && !_connectingStarted)
                         Connect({});
-                });
+                }));
         }
 
         void Stop() override
@@ -388,16 +376,13 @@ namespace
 
             auto f = prm.get_future();
 
-            asio::defer(_strand, [this, a = AliveFlag(), prm = std::move(prm)]() mutable {
-
-                if (!a.IsAlive()) return;
-
+            asio::defer(_strand, Wrap([this, prm = std::move(prm)]() mutable {
                 LOG(trace) << "Service finishing is in a progress..";
 
                 Cancel();
                 _pThis.reset();
                 prm.set_value();
-                });
+                }));
 
             auto status = f.wait_for(std::chrono::milliseconds(20000));
 
@@ -431,9 +416,9 @@ namespace
 
             auto [p, f] = Protocol::MakePFPair<ExtIO_TCP_Proto::Message>();
 
-            auto h = [this, a = AliveFlag(), p = std::move(p)]
+            auto h = Wrap([this, p = std::move(p)]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
-                if (!a.IsAlive() || !_connectionEstablished) return;
+                if (!_connectionEstablished) return;
                 if (!res.has_inithw())
                 {
                     p.set_value({});
@@ -443,12 +428,12 @@ namespace
                     << res.inithw().has_result() ? res.inithw().result() : false;
                 p.set_value(res);
                 return;
-            };
+            });
 
-            asio::defer(_strand, [this, a = AliveFlag(), h = std::move(h)]() mutable {
-                if (!a.IsAlive() || !_connectionEstablished) return;
+            asio::defer(_strand, Wrap([this, h = std::move(h)]() mutable {
+                if (!_connectionEstablished) return;
                 AsyncSendRequest(Protocol::Make_InitHW_Msg({}, {}, {}, {}), std::move(h));
-                });
+                }));
 
             auto msg = f.get();
             if (!msg.has_inithw())
@@ -539,11 +524,10 @@ namespace
             LOG(trace) << "SetCallback is called.";
             std::promise<void> prm;
             auto f = prm.get_future();
-            asio::defer(_strand, [this, a = AliveFlag(), funcptr, prm = std::move(prm)]() mutable {
-                if (!a.IsAlive()) return;
+            asio::defer(_strand, Wrap([this, funcptr, prm = std::move(prm)]() mutable {
                 (*_pfnExtIOCallback.synchronize()) = funcptr;
                 prm.set_value();
-                });
+                }));
             f.get();
         }
 
@@ -566,23 +550,23 @@ namespace
             auto [p, f] = Protocol::MakePFPair<ExtIO_TCP_Proto::Message>();
             int64_t _did = 0;
             auto const rqsContentCase = rqs.Content_case();
-            auto h = [this, a = AliveFlag(), p = std::move(p), &_did]
+            auto h = Wrap([this, p = std::move(p), &_did]
             (const boost::system::error_code& ec, const ExtIO_TCP_Proto::Message& res, int64_t did) mutable {
-                if (!a.IsAlive() || !_apiLoaded) {
+                if (!_apiLoaded) {
                     p.set_value({});
                     return;
                 }
                 _did = did;
                 p.set_value(res);
-            };
-            asio::dispatch(_strand, [this, a = AliveFlag(), rqs = std::move(rqs), h = std::move(h)]() mutable {
-                if (!a.IsAlive() || !_apiLoaded) {
-                    h({}, {}, -1);
+            });
+            asio::dispatch(_strand, Wrap([this, rqs = std::move(rqs), h = std::move(h)]() mutable {
+                if (!_apiLoaded) {
+                    h(boost::system::error_code(), ExtIO_TCP_Proto::Message(), -1);
                     return;
                 }
                 AsyncSendRequest(rqs, std::move(h));
                 ResetKeepAliveTimer();
-                });
+                }));
             auto responce = std::move(f.get());
             LOG(trace)
                 << "Responce [" << _did << "]: " 
@@ -595,22 +579,22 @@ namespace
         {
             LOG(trace) << "New notify: " << Protocol::IParser::GetMessageName(rqs);
             auto [p, f] = Protocol::MakePFPair<void>();
-            auto h = [this, a = AliveFlag(), p = std::move(p)]
+            auto h = Wrap([this, p = std::move(p)]
             (const boost::system::error_code& ec) mutable {
-                if (!a.IsAlive() || !_apiLoaded) {
+                if (!_apiLoaded) {
                     p.set_value();
                     return;
                 }
                 p.set_value();
-            };
-            asio::dispatch(_strand, [this, a = AliveFlag(), rqs = std::move(rqs), h = std::move(h)]() mutable {
-                if (!a.IsAlive() || !_apiLoaded) {
-                    h({});
+            });
+            asio::dispatch(_strand, Wrap([this, rqs = std::move(rqs), h = std::move(h)]() mutable {
+                if (!_apiLoaded) {
+                    h(boost::system::error_code());
                     return;
                 }
                 AsyncSendResponce(rqs, 0, std::move(h));
                 ResetKeepAliveTimer();
-                });
+                }));
             f.get();
         }
 
