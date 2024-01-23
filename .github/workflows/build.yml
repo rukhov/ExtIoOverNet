@@ -1,4 +1,4 @@
-name: learn-github-actions
+name: Build solution
 run-name: ${{ github.actor }} is learning GitHub Actions
 on: [push]
 jobs:
@@ -12,6 +12,10 @@ jobs:
         run: dir
         working-directory: ${{ github.workspace }}
 
+      - name: Generate solution
+        run: ./1.generate.solution.cmd
+        working-directory: ${{ github.workspace }}
+
       - name: Build solution
-        run: ./build.solution.cmd 
+        run: ./2.build.solution.cmd
         working-directory: ${{ github.workspace }}
