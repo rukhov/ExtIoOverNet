@@ -10,9 +10,9 @@ jobs:
         
       - name: Build solution 1
         run: pwd
+        run: dir
 
-      - name: Build solution 2
+      - name: Build solution
         run: pwd
+        run: build.solution.cmd 
         working-directory: ${{ github.workspace }}
-        
-      - run: build.solution.cmd
