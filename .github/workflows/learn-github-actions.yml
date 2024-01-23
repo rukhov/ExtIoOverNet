@@ -5,7 +5,14 @@ jobs:
   build-latest-commit:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
-      - run: echo %cd%
-      - run: cd
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Build solution 1
+        run: pwd
+
+      - name: Build solution 2
+        run: pwd
+        working-directory: ${{ github.workspace }}
+        
       - run: build.solution.cmd
