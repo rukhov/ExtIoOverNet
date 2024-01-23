@@ -1,0 +1,26 @@
+name: Build solution
+run-name: ${{ github.actor }} is learning GitHub Actions
+on: [push]
+jobs:
+  build-latest-commit:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+        with:
+          msbuild-architecture: x64
+
+      - name: Build solution 1
+        run: dir
+        working-directory: ${{ github.workspace }}
+
+      - name: Generate solution
+        run: ./1.generate.solution.cmd
+        working-directory: ${{ github.workspace }}
+
+      - name: Build solution
+        run: ./2.build.solution.cmd
+        working-directory: ${{ github.workspace }}
