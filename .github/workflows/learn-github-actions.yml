@@ -13,5 +13,5 @@ jobs:
         working-directory: ${{ github.workspace }}
 
       - name: Build solution
-        run: build.solution.cmd 
+        run: ./build.solution.cmd 
         working-directory: ${{ github.workspace }}
