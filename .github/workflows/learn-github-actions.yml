@@ -6,4 +6,6 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S ./ -B ./out -G "Visual Studio 17 2022" -A Win32
+      - run: echo "CD: %cd%"
+      - run: build.solution.cmd
+
