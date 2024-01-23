@@ -8,6 +8,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+        with:
+          msbuild-architecture: x64
+
       - name: Build solution 1
         run: dir
         working-directory: ${{ github.workspace }}
