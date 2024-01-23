@@ -9,10 +9,9 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Build solution 1
-        run: pwd
         run: dir
+        working-directory: ${{ github.workspace }}
 
       - name: Build solution
-        run: pwd
         run: build.solution.cmd 
         working-directory: ${{ github.workspace }}
